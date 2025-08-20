@@ -1,0 +1,4 @@
+.env
+*.txt
+deepseekagentbackup.py
+ai_code_sol.py
