@@ -29,11 +29,35 @@ async def deepseek_agent(prompt:str,session_id: str):
         persist_directory=persistent_directory,
         embedding_function=embeddings,
     )
-    all_docs=vector_store.get(include=['documents'])['documents']
-    print(f'Found {len(all_docs)} relevant documents for the query.')
-    if not all_docs:
-        return "No relevant documents found."
-    context = "\n".join(all_docs)
+    # Always fetch ALL chunks from Tailwind sources
+    tailwind_docs = vector_store.get(
+        where={"source": "Tailwind"}, include=["documents"]
+    )["documents"]
+
+    tailwind_context = "\n".join(tailwind_docs)
+
+    tailwind_ui_kit = vector_store.get(where={"source": "Tailwind-UI-Kit"}, include=["documents"])["documents"]
+    tailwind_templates = vector_store.get(where={"source": "Tailwindcss-Templates"}, include=["documents"])["documents"]
+
+    styling_examples = "\n".join(tailwind_ui_kit + tailwind_templates)
+
+    # Fetch top-k matches for user prompt from other docs
+    relevant_docs = vector_store.similarity_search(
+        query=prompt,
+        k=7,
+        filter={"source": {"$nin": ["Tailwind", "Tailwind-UI-Kit", "Tailwindcss-Templates"]}}
+    )
+    other_context = "\n".join([doc.page_content for doc in relevant_docs])
+    context = f"""
+    [TAILWIND CSS DOCS — Always use for actual utility classes & responsive design]
+    {tailwind_context}
+
+    [STYLING REFERENCE — UI Kit & Templates, use only as design inspiration]
+    {styling_examples}
+
+    [OTHER RELEVANT DOCS — React, Router, Axios, RHF]
+    {other_context}
+    """
 
     chat_history = RedisChatMessageHistory(session_id=session_id, url=redis_url)
 
@@ -59,27 +83,19 @@ async def deepseek_agent(prompt:str,session_id: str):
 
     final_prompt = f"""
     You are a senior React developer and TailwindCSS expert.  
-    Your goal is to generate a **fully working, production-ready React application** (or component) based exclusively on the documentation and code snippets provided in the Context section.  
 
-    You must:
-    - Use only the imports, APIs, and patterns found in Context.  
-    - Produce all necessary files and folder structure, including:
-      - package.json (with required dependencies)  
-      - tailwind.config.js and postcss.config.js (with Tailwind setup)  
-      - src/index.jsx  
-      - src/App.jsx  
-      - src/components/... (one component per file, default export)    
-    - Ensure the code **compiles without errors** and follows best practices:
-      - Functional components with hooks only  
-      - Default exports for all components  
-      - Mobile-first responsive design using Tailwind classes  
-      - Accessibility (alt tags, semantic HTML)  
-      - No unused imports or dead code  
-    - The app must use TailwindCSS for **all styling** (no inline styles unless absolutely necessary).  
-    - Wrap your answer in Markdown triple backtick code blocks per file, with file paths as headings.  
-    Do NOT use Vue.js. Only use React and TailwindCSS as shown in the context.
-    Remember in context even if the code is in js or ts or tsx, you have to generate the code in jsx format.
-    For the ease of users you also provide installation commands for the dependencies.
+    - For styling, you **must use Tailwind utility classes strictly from [TAILWIND CSS DOCS]**.  
+    - You may use [STYLING REFERENCE] **only as inspiration** to structure the design (layout, card patterns, hero sections, etc.).  
+    - Use [OTHER RELEVANT DOCS] for React APIs, Router, forms, or data fetching logic.  
+
+    Rules:
+    - Functional components with hooks only  
+    - Tailwind for ALL styling (no inline styles)  
+    - Production-ready, compiling React code  
+    - Responsive, accessible, mobile-first  
+    - No Vue,No Express,No Node, no plain HTML
+    - Provide user installation commands for any new packages used
+
     Previous Chat History:  
     {prev_messages_text}  
 
