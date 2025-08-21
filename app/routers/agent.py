@@ -36,7 +36,8 @@ async def store_chat(chat:ChatData,db: AsyncSession = Depends(get_session)):
 @router.post('/create-new-session',status_code=status.HTTP_201_CREATED)
 async def create_new_session(current_user: user_dependency, db: AsyncSession = Depends(get_session)):
     # First validating if the user exists
-    user = await db.execute(select(User).filter(User.id == current_user.id)).scalars().first()
+    result = await db.execute(select(User).filter(User.id == current_user.id))
+    user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 

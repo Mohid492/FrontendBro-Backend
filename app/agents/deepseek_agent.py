@@ -15,7 +15,7 @@ logger = logging.getLogger()
 
 redis_url=settings.REDIS_URL
 embeddings = OllamaEmbeddings(model="nomic-embed-text:latest")
-model="deepseek-coder-v2:latest"
+model="qwen3:14b"
 llm = OllamaLLM(model=model)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 db_dir = os.path.join(current_dir, "db")
@@ -44,7 +44,7 @@ async def deepseek_agent(prompt:str,session_id: str):
     # Fetch top-k matches for user prompt from other docs
     relevant_docs = vector_store.similarity_search(
         query=prompt,
-        k=7,
+        k=5,
         filter={"source": {"$nin": ["Tailwind", "Tailwind-UI-Kit", "Tailwindcss-Templates"]}}
     )
     other_context = "\n".join([doc.page_content for doc in relevant_docs])
@@ -65,7 +65,7 @@ async def deepseek_agent(prompt:str,session_id: str):
         llm=llm,
         memory_key="chat_history",
         chat_memory=chat_history,
-        max_token_limit=1500,  # adjust based on model context size
+        max_token_limit=2500,  # adjust based on model context size
         return_messages=True
     )
     # fetch previous messages from chat history
@@ -82,32 +82,67 @@ async def deepseek_agent(prompt:str,session_id: str):
         prev_messages_text = None
 
     final_prompt = f"""
-    You are a senior React developer and TailwindCSS expert.  
+    You are an **expert Senior React Developer** and **TailwindCSS specialist**.
 
-    - For styling, you **must use Tailwind utility classes strictly from [TAILWIND CSS DOCS]**.  
-    - You may use [STYLING REFERENCE] **only as inspiration** to structure the design (layout, card patterns, hero sections, etc.).  
-    - Use [OTHER RELEVANT DOCS] for React APIs, Router, forms, or data fetching logic.  
+    ## PURPOSE
+    Generate a **fully functional, production-ready React application** that strictly follows:
+    - Styling rules from **[TAILWIND CSS DOCS]**
+    - Layout inspiration from **[STYLING REFERENCE]** (inspiration only — DO NOT copy code)
+    - Logic, routing, and data handling from **[OTHER RELEVANT DOCS]**
 
-    Rules:
-    - Functional components with hooks only  
-    - Tailwind for ALL styling (no inline styles)  
-    - Production-ready, compiling React code  
-    - Responsive, accessible, mobile-first  
-    - No Vue,No Express,No Node, no plain HTML
-    - Provide user installation commands for any new packages used
+    The agent reads documentation from a vector store (`{context}`) and responds to user requirements (`{prompt}`).
 
-    Previous Chat History:  
-    {prev_messages_text}  
+    ---
 
-    Context:  
-    {context}  
+    ## OUTPUT ARCHITECTURE (MANDATORY)
+    - `src/components/` → Reusable UI components (e.g., `Navbar.jsx`, `ProductCard.jsx`)
+    - `src/pages/` → Page-level components (e.g., `ProductPage.jsx`, `CartPage.jsx`)
+    - `src/context/` → Context provider for shared state (`CartContext.jsx`)
+    - `src/App.jsx` → Main router shell only (imports Navbar + Pages)
+    - `src/index.jsx` → React DOM entry point
 
-    User Question:  
-    {prompt}  
+    ---
+
+    ## RULES
+    1. **Coding Style**
+       - Functional components with Hooks only.
+       - All styling uses Tailwind utility classes.
+       - Code must compile without errors.
+
+    2. **Routing**
+       - Use `react-router-dom` for navigation between pages.
+       - Include installation commands for any new packages at the start.
+
+    3. **State Management**
+       - Use React Context API for cart state.
+       - Allow adding the same product multiple times; dynamically calculate total.
+
+    ---
+
+    ## VECTOR CONTEXT
+    Only include details from `{context}` if relevant; ignore unrelated vector content.
+
+    ---
+
+    ## OUTPUT FORMAT
+    - **Section 1:** Installation commands
+    - **Section 2:** Complete file tree with **file names and code blocks per file**
+    - **Section 3:** Notes on responsive behavior, accessibility, and design decisions
+
+    ---
+
+    ## CONTEXT
+    Previous Chat:
+    {prev_messages_text}
+
+    User Requirement:
+    {prompt}
     """
 
     # Query DeepSeek model
     response =await llm.ainvoke(final_prompt)
+    logger.info("LLM called")
+    logger.info(f"Context Length: {len(context)} characters")
     chat_history.add_user_message(prompt)
     chat_history.add_ai_message(str(response))    # Store new messages ad
     return response
