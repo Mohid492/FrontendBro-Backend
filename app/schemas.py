@@ -32,4 +32,14 @@ class ChatDataResponse(BaseModel):
     prompt: str
     response: str
 
+    class Config:
+        from_attributes = True
+
+
+class Sessions(BaseModel):
+    session_id: str
+
+    class Config:
+        orm_mode = True
+
 

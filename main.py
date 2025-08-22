@@ -4,6 +4,9 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import settings
 from app.routers import scraper,agent,generate_vector
 from app.routers.auth.auth import router as auth_router
+import logging
+
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 app = FastAPI()
 
 origins = [
