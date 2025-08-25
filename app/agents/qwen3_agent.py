@@ -15,8 +15,8 @@ logger = logging.getLogger()
 
 redis_url=settings.REDIS_URL
 embeddings = OllamaEmbeddings(model="nomic-embed-text:latest")
-#model="qwen3:14b"
-model="qwen3-coder:30b"
+
+model="qwen3:30b"
 llm = ChatOllama(model=model)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 db_dir = os.path.join(current_dir, "db")
@@ -30,12 +30,6 @@ async def qwen_agent(prompt:str, session_id: str):
         persist_directory=persistent_directory,
         embedding_function=embeddings,
     )
-    # Always fetch ALL chunks from Tailwind sources
-    # tailwind_docs = vector_store.get(
-    #     where={"source": "Tailwind"}, include=["documents"]
-    # )["documents"]
-    #
-    # tailwind_context = "\n".join(tailwind_docs)
 
     tailwind_ui_kit = vector_store.get(where={"source": "Tailwind-UI-Kit"}, include=["documents"])["documents"]
     tailwind_templates = vector_store.get(where={"source": "Tailwindcss-Templates"}, include=["documents"])["documents"]
@@ -45,7 +39,7 @@ async def qwen_agent(prompt:str, session_id: str):
     # Fetch top-k matches for user prompt from other docs
     relevant_docs = vector_store.similarity_search(
         query=prompt,
-        k=5,
+        k=6,
         filter={"source": {"$nin": ["Tailwind-UI-Kit", "Tailwindcss-Templates"]}}
     )
     other_context = "\n".join([doc.page_content for doc in relevant_docs])
@@ -66,7 +60,7 @@ async def qwen_agent(prompt:str, session_id: str):
         max_token_limit=2500,  # adjust based on model context size
         return_messages=True
     )
-    # fetch previous messages from chat history
+    #fetch previous messages from chat history
     prev_messages = await memory.chat_memory.aget_messages()
     if prev_messages:
         if len(prev_messages)>=3:
@@ -80,90 +74,74 @@ async def qwen_agent(prompt:str, session_id: str):
         prev_messages_text = None
 
     final_prompt = f"""
-    You are an expert Senior React Developer and TailwindCSS specialist.  
-    Your goal is to generate a fully functional, production‑ready React application** that strictly adheres to the following guidelines.
+    You are a Senior React + TailwindCSS engineer. Output a complete, production-ready React app.
+        
+        PURPOSE
+        - Build a single-product e-commerce site with cart (add same item multiple times, compute totals), routing, and responsive UI with Tailwind.
+        
+        ALLOWED ROOT FILES
+        - package.json, vite.config.js, index.html
+        - tailwind.config.js, postcss.config.js
+        - src/index.css containing ONLY @tailwind directives
+        
+        ARCHITECTURE
+        - src/components/ → reusable UI (Navbar.jsx, ProductCard.jsx, etc.)
+        - src/pages/ → page-level (ProductPage.jsx, CartPage.jsx)
+        - src/context/ → shared state provider (CartContext.jsx)
+        - src/App.jsx → router shell importing Navbar + pages
+        - src/index.jsx → React DOM entry
+        - Root configs listed above are mandatory
+        
+        HARD BANS INSIDE src/
+        - No <script> tags, CDN links, or inline <style>
+        - No TypeScript files
+        - No CSS files other than src/index.css, and that file must only contain @tailwind directives
+        
+        RULES
+        1) Coding Style
+           - Functional components with hooks only
+           - All styling via Tailwind utility classes
+        2) Routing
+           - Use react-router-dom
+        3) State Management
+           - React Context for cart
+        4) Tailwind
+           - Responsive prefixes (sm, md, lg, xl)
+        5) Data
+           - No external APIs; use local mock data. If there are no HTTP calls, do NOT import axios.
+        6) Build
+           - Use Vite + React. Provide package.json scripts and vite.config.js.
+           - Provide index.html (needed by Vite)
+        
+        VECTOR CONTEXT (reference only; ignore if irrelevant)
+        {context}
+        
+        OUTPUT FORMAT
+        - Section 1: Installation commands
+        - Section 2: Complete file tree with one fenced code block per file
+          - First line of each block: FILE: <relative-path-from-project-root>
+          - Then the full file contents only
+        - Section 3: Notes on responsive behavior, accessibility, and design decisions (max 3 sentences)
+        
+        PREFLIGHT CHECKLIST (self-verify before output; if any fail, silently fix then output)
+        - package.json, vite.config.js, index.html, tailwind.config.js, postcss.config.js, src/index.css exist
+        - src/index.jsx renders <App/> into #root
+        - src/App.jsx defines BrowserRouter with routes for product and cart
+        - src/context/CartContext.jsx exports provider and hook; totals compute correctly
+        - All imports resolve, all files referenced exist, no TypeScript, no external API calls
+        - Only src/index.css contains @tailwind directives; no other CSS files
+        - Build runs with: npm i && npm run dev
+        
+        Chat History:
+        {prev_messages_text}
+        
+        USER REQUIREMENT
+        {prompt}
+        
+        
+        IMPORTANT
+        - Complete, executable app only. No explanations.
 
-    ## PURPOSE
-    Generate a fully functional, production‑ready React application** that strictly follows:
-    - Styling rules from [TAILWIND CSS DOCS — ALWAYS use for actual utility classes & responsive design]
-    - Layout inspiration from [STYLING REFERENCE — UI Kit & Templates, use only as design inspiration]
-    - Logic, routing, and data handling from **[OTHER RELEVANT DOCS — React, Router, Axios, RHF]
-    - Output a complete file tree, with each component, context, and page in its own file (e.g., `Navbar.jsx`, `CartContext.jsx`, `ProductPage.jsx`).
-    - Use React Context API for any state shared across multiple components (e.g., cart state).
-    - All code must be split into separate files as per the architecture below.
-
-    ## ARCHITECTURE (MANDATORY)
-    - `src/components/` → Reusable UI components (e.g., `Navbar.jsx`, `ProductCard.jsx`)
-    - `src/pages/` → Page‑level components (e.g., `ProductPage.jsx`, `CartPage.jsx`)
-    - `src/context/` → Context provider for shared state (`CartContext.jsx`)
-    - `src/App.jsx` → Main router shell only (imports Navbar + Pages)
-    - `src/index.jsx` → React DOM entry point
-    
-    Hard bans (if you include any, you must regenerate to comply):
-    - Any <html>, <head>, <body>, or <script src> tags
-    - CDN links for React or Tailwind
-    - Inline <script type="text/babel"> or Babel standalone
-    - TypeScript
-
-    ## RULES (ABSOLUTELY CRITICAL)
-    1. Coding Style:
-       - Functional components with Hooks only.  No class components.
-       - All styling *must* use Tailwind utility classes.  No custom CSS, CSS modules, or inline styles.
-       - Code must compile without errors.  Maintain consistent formatting.
-
-    2. Routing:
-       - Use `react-router-dom` for navigation between pages.
-       - Include installation commands for any new packages at the start.
-
-    3. State Management:
-       - Use React Context API for cart state.
-       - Allow adding the same product multiple times; dynamically calculate total.
-
-    4. TailwindCSS Adherence:
-       - Strictly follow the [TAILWIND CSS DOCS]. Use only utility classes – no overrides.
-       - Responsive design must be implemented using Tailwind's responsive prefixes (`sm`, `md`, `lg`, `xl`).
-    
-    5. Reasoning:
-       - Apply logical thinking and best practices to solve problems and structure the code.
-       - Ensure all solutions are robust, efficient, and follow modern development standards.
-   
-    ## VECTOR CONTEXT (ONLY FOR REFERENCE – Prioritize TAILWIND CSS DOCS)
-    Only include details from `{{context}}` if relevant; ignore unrelated vector content.
-
-    ## OUTPUT FORMAT
-    - Section 1: Installation commands (using `npm install` or `yarn add`)
-    - Section 2: Complete file tree with **file names and code blocks per file**  
-      - Each file must be in its own fenced code block.  
-      - First line inside each block must be exactly:  
-        FILE: <relative-path-from-project-root>  
-      - Then the full file contents, nothing else.
-    - Section 3: Notes on responsive behavior, accessibility, and design decisions (brief – max 3 sentences)
-
-    ## VECTOR CONTEXT
-    {context}
-
-    ## DO NOT FORGET — CRITICAL RULES:
-    - Follow architecture exactly
-    - Tailwind utility classes only
-    - React Router for nav
-    - React Context API for shared state
-    - Output format: Section 1 installs, Section 2 file tree/code, Section 3 notes
-    - No comments or TODOs in any file
-    - No external APIs or placeholders — use local mock data if needed
-    - No using typescript
-    - Use axios for any api calls
-
-    Chat History:
-    {prev_messages_text}
-
-    ## USER REQUIREMENT
-    {prompt}
-
-    
-
-    IMPORTANT:
-    Your output must be a complete, executable React application.  
-    Do not generate explanations; focus solely on the code and structure as instructed.
     """
 
     # Query DeepSeek model
