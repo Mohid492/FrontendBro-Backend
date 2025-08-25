@@ -1,4 +1,4 @@
-from fastapi import status,APIRouter,HTTPException,Depends,BackgroundTasks
+from fastapi import status,APIRouter,HTTPException,Depends,BackgroundTasks,UploadFile, File
 from app.database import get_session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select,delete
@@ -6,12 +6,12 @@ from ..models import *
 from ..schemas import *
 from datetime import datetime
 from typing import List
-from ..agents.deepseek_agent import deepseek_agent
+from ..agents.qwen3_agent import qwen_agent
+from ..agents.gemma3_agent import gemma_agent
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 from ..config import settings
 import logging
 from .auth.services import user_dependency
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
@@ -86,25 +86,33 @@ async def delete_chat(current_user: user_dependency,session_id:str,db: AsyncSess
     await redis_chat_history.clear()
     logger.info(f"Chat history and session {session_id} deleted for user {current_user.id}")
 
-@router.post('/deepseek-chat', status_code=status.HTTP_200_OK)
-async def deepseek_chat(current_user: user_dependency,prompt:str,background_tasks: BackgroundTasks,db: AsyncSession = Depends(get_session)):
+@router.post('/qwen-chat', status_code=status.HTTP_200_OK)
+async def qwen_chat(current_user: user_dependency,prompt:str,db: AsyncSession = Depends(get_session)):
     # First validating if the user exists
     query = await db.execute(select(User).filter(User.id == current_user.id))
     user = query.scalars().first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    is_new=False
+
     # Getting the latest user session id
     session= await db.execute(
         select(Session).filter(Session.user_id == current_user.id).order_by(Session.created_at.desc()).limit(1)
     )
-    latest_session_id= session.scalar_one_or_none()
-    if latest_session_id is None:
+    session_obj= session.scalar_one_or_none()
+    if session_obj is None:
         latest_session_id=generate_session_id(current_user.id)
+        new_session=Session(
+            user_id=current_user.id,
+            session_id=latest_session_id
+        )
+        db.add(new_session)
+        await db.commit()
+        await db.refresh(new_session)
+        session_id = new_session.session_id
+    else:
+        session_id = session_obj.session_id
 
-    session_id=latest_session_id
-
-    res= await deepseek_agent(prompt,session_id)
+    res= await qwen_agent(prompt, session_id)
     chat_data = ChatData(
         session_id=session_id,
         user_id=current_user.id,
@@ -112,7 +120,55 @@ async def deepseek_chat(current_user: user_dependency,prompt:str,background_task
         response=res
     )
 
-    background_tasks.add_task(store_chat, chat_data, db)
+    await store_chat(chat_data, db)
+    logger.info("Chat data stored in the database")
+
+    return res
+
+
+@router.post('/gemma-chat', status_code=status.HTTP_200_OK)
+async def gemma_chat(
+    current_user: user_dependency,
+    db: AsyncSession = Depends(get_session),
+    prompt: str=None,
+    image: UploadFile = File(...)
+):
+    # First validating if the user exists
+    query = await db.execute(select(User).filter(User.id == current_user.id))
+    user = query.scalars().first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    # Getting the latest user session id
+    session = await db.execute(
+        select(Session).filter(Session.user_id == current_user.id).order_by(Session.created_at.desc()).limit(1)
+    )
+    session_obj = session.scalar_one_or_none()
+    if session_obj is None:
+        latest_session_id = generate_session_id(current_user.id)
+        new_session = Session(
+            user_id=current_user.id,
+            session_id=latest_session_id
+        )
+        db.add(new_session)
+        await db.commit()
+        await db.refresh(new_session)
+        session_id = new_session.session_id
+    else:
+        logger.info("Using existing session")
+        session_id = session_obj.session_id
+
+    # Read image as bytes
+    image_bytes = await image.read()
+
+    res= await gemma_agent(prompt=prompt, session_id=session_id,image=image_bytes)
+    chat_data = ChatData(
+        session_id=session_id,
+        user_id=current_user.id,
+        prompt=prompt,
+        response=res
+    )
+
+    await store_chat(chat_data, db)
     logger.info("Chat data stored in the database")
 
     return res

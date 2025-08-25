@@ -17,7 +17,7 @@ embeddings = OllamaEmbeddings(model="nomic-embed-text:latest")
 current_dir = os.path.dirname(os.path.abspath(__file__))
 extracted_data_dir = os.path.join(current_dir, "..", "docs_scrapers", "extracted_data")
 file_paths = glob.glob(os.path.join(extracted_data_dir,"*.txt"))
-print(file_paths)
+
 # Create path for storing the vector database
 message=""
 persistent_directory = os.path.join(current_dir, "db", "chroma_db")
