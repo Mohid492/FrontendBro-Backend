@@ -4,6 +4,7 @@ from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings,OllamaLLM,ChatOllama
 from langchain.memory import ConversationSummaryBufferMemory
 from langchain_community.chat_message_histories import RedisChatMessageHistory
+from langchain_openai import ChatOpenAI
 import logging
 
 # Configure logging
@@ -16,8 +17,12 @@ logger = logging.getLogger()
 redis_url=settings.REDIS_URL
 embeddings = OllamaEmbeddings(model="nomic-embed-text:latest")
 
-model="qwen3:30b"
-llm = ChatOllama(model=model)
+llm=ChatOpenAI(
+    model="gpt-5-mini",
+    api_key=settings.OPENAI_API_KEY
+)
+# if you want to use Ollama model, uncomment below and comment above llm
+#llm = ChatOllama(model="qwen3:30b")
 current_dir = os.path.dirname(os.path.abspath(__file__))
 db_dir = os.path.join(current_dir, "db")
 persistent_directory = os.path.abspath(os.path.join(current_dir, "..", "RAG", "db", "chroma_db"))
@@ -47,7 +52,7 @@ async def qwen_agent(prompt:str, session_id: str):
     [STYLING REFERENCE — UI Kit & Templates, use only as design inspiration]
     {styling_examples}
 
-    [OTHER RELEVANT DOCS — React,Tailwindcss , Router, Axios]
+    [OTHER RELEVANT DOCS — React,Tailwindcss , React Router, Axios]
     {other_context}
     """
 
@@ -60,7 +65,7 @@ async def qwen_agent(prompt:str, session_id: str):
         max_token_limit=2500,  # adjust based on model context size
         return_messages=True
     )
-    #fetch previous messages from chat history
+
     prev_messages = await memory.chat_memory.aget_messages()
     if prev_messages:
         if len(prev_messages)>=3:
@@ -69,79 +74,70 @@ async def qwen_agent(prompt:str, session_id: str):
             [f"{msg.type.upper()}: {msg.content}" for msg in prev_messages]
         )
         logger.info("Previous messages fetched from chat history:")
-        logger.info(prev_messages_text)
+
     else:
         prev_messages_text = None
 
     final_prompt = f"""
-    You are a Senior React + TailwindCSS engineer. Output a complete, production-ready React app.
-        
+        You are a Senior React + TailwindCSS engineer. Output a complete, production-ready React app based on the USER REQUIREMENT. Use .jsx file extensions for all React components and JavaScript files containing React code.
+
         PURPOSE
-        - Build a single-product e-commerce site with cart (add same item multiple times, compute totals), routing, and responsive UI with Tailwind.
-        
-        ALLOWED ROOT FILES
-        - package.json, vite.config.js, index.html
-        - tailwind.config.js, postcss.config.js
-        - src/index.css containing ONLY @tailwind directives
-        
-        ARCHITECTURE
-        - src/components/ → reusable UI (Navbar.jsx, ProductCard.jsx, etc.)
-        - src/pages/ → page-level (ProductPage.jsx, CartPage.jsx)
-        - src/context/ → shared state provider (CartContext.jsx)
-        - src/App.jsx → router shell importing Navbar + pages
+        - Build a fully functional, responsive webpage/app as described in the USER REQUIREMENT, using React and Tailwind CSS.
+        - Incorporate features like state management, routing, and UI components as needed to fulfill the requirement.
+
+        ARCHITECTURE (adapt based on USER REQUIREMENT; use these as defaults if suitable)
+        - src/components/ → reusable UI components (e.g., Navbar.jsx, Button.jsx)
+        - src/pages/ → page-level components (e.g., HomePage.jsx, AboutPage.jsx)
+        - src/context/ → shared state providers if needed (e.g., AppContext.jsx for global state)
+        - src/App.jsx → main app shell with router and layout (import shared components/pages)
         - src/index.jsx → React DOM entry
-        - Root configs listed above are mandatory
-        
+        - Root configs (package.json, vite.config.js, index.html, src/index.css) are mandatory
+
         HARD BANS INSIDE src/
         - No <script> tags, CDN links, or inline <style>
-        - No TypeScript files
+        - No TypeScript files (use .jsx for React components, .js for non-React if needed)
         - No CSS files other than src/index.css, and that file must only contain @tailwind directives
-        
+        - No external API calls or imports (e.g., no axios); use local mock data if data is needed
+
         RULES
         1) Coding Style
-           - Functional components with hooks only
-           - All styling via Tailwind utility classes
+           - Functional components with hooks only (e.g., useState, useEffect, useContext)
+           - All styling via Tailwind utility classes; ensure responsive design with prefixes (sm, md, lg, xl)
         2) Routing
-           - Use react-router-dom
+           - Use react-router-dom if multiple pages/routes are required by the USER REQUIREMENT
         3) State Management
-           - React Context for cart
-        4) Tailwind
-           - Responsive prefixes (sm, md, lg, xl)
-        5) Data
-           - No external APIs; use local mock data. If there are no HTTP calls, do NOT import axios.
-        6) Build
-           - Use Vite + React. Provide package.json scripts and vite.config.js.
+           - Use React Context for shared/global state if needed; local state with hooks otherwise
+        4) Data
+           - No external APIs; hardcode mock data in components or context as appropriate
+        5) Build
+           - Use Vite + React setup. Provide package.json with scripts (e.g., npm run dev, build) and vite.config.js.
            - Provide index.html (needed by Vite)
-        
-        VECTOR CONTEXT (reference only; ignore if irrelevant)
+
+        VECTOR CONTEXT (reference only; integrate relevant ideas/code patterns if they match the USER REQUIREMENT, ignore if irrelevant)
         {context}
-        
+
         OUTPUT FORMAT
-        - Section 1: Installation commands
+        - Section 1: Installation commands (e.g., npm init vite@latest, dependencies)
         - Section 2: Complete file tree with one fenced code block per file
           - First line of each block: FILE: <relative-path-from-project-root>
-          - Then the full file contents only
+          - Then the full file contents only (ensure all imports resolve and code is error-free)
         - Section 3: Notes on responsive behavior, accessibility, and design decisions (max 3 sentences)
-        
+
         PREFLIGHT CHECKLIST (self-verify before output; if any fail, silently fix then output)
-        - package.json, vite.config.js, index.html, tailwind.config.js, postcss.config.js, src/index.css exist
         - src/index.jsx renders <App/> into #root
-        - src/App.jsx defines BrowserRouter with routes for product and cart
-        - src/context/CartContext.jsx exports provider and hook; totals compute correctly
-        - All imports resolve, all files referenced exist, no TypeScript, no external API calls
+        - src/App.jsx sets up BrowserRouter with routes if routing is needed, and imports all necessary components/pages
+        - Any context (if used) exports provider and hook; state logic is correct and bug-free
+        - All imports resolve, all files referenced exist, no TypeScript, no external API calls, app fulfills USER REQUIREMENT; all React files use .jsx extension
         - Only src/index.css contains @tailwind directives; no other CSS files
-        - Build runs with: npm i && npm run dev
+        - Build runs with: npm i && npm run dev; code is complete and executable without errors
         
-        Chat History:
+        CHAT HISTORY
         {prev_messages_text}
-        
         USER REQUIREMENT
         {prompt}
-        
-        
-        IMPORTANT
-        - Complete, executable app only. No explanations.
 
+        IMPORTANT
+        - Complete, executable app only. No explanations outside the output format.
     """
 
     # Query DeepSeek model
@@ -149,7 +145,7 @@ async def qwen_agent(prompt:str, session_id: str):
     logger.info(f"Context Length: {len(context)} characters")
     response =await llm.ainvoke(final_prompt)
     chat_history.add_user_message(prompt)
-    chat_history.add_ai_message(str(response.content))    # Store new messages ad
+    chat_history.add_ai_message(str(response.content))
     logger.info("Chat stored in redis")
     if hasattr(response, "content"):
         return response.content

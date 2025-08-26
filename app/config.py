@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     FRONTEND_URL: str
     GOOGLE_REDIRECT_URI: str
     REDIS_URL: str
+    CODER_API: str
+    OPENAI_API_KEY: str
     class Config:
         env_file = ".env"
 
