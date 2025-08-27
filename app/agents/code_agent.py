@@ -23,6 +23,7 @@ llm=ChatOpenAI(
 )
 # if you want to use Ollama model, uncomment below and comment above llm
 #llm = ChatOllama(model="qwen3:30b")
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 db_dir = os.path.join(current_dir, "db")
 persistent_directory = os.path.abspath(os.path.join(current_dir, "..", "RAG", "db", "chroma_db"))

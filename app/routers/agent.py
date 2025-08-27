@@ -6,7 +6,7 @@ from ..models import *
 from ..schemas import *
 from datetime import datetime
 from typing import List
-from ..agents.qwen3_agent import qwen_agent
+from ..agents.code_agent import qwen_agent
 from ..agents.gemma3_agent import gemma_agent
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 from ..config import settings
@@ -41,7 +41,15 @@ async def create_new_session(current_user: user_dependency, db: AsyncSession = D
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     session_id = generate_session_id(current_user.id)
-
+    new_session = Session(
+        user_id=current_user.id,
+        session_id=session_id
+    )
+    db.add(new_session)
+    await db.commit()
+    await db.refresh(new_session)
+    session_id = new_session.session_id
+    logger.info("New session created")
     return {"session_id": session_id}
 
 @router.get('/get-sessions',response_model=List[Sessions],status_code=status.HTTP_200_OK)
@@ -61,6 +69,7 @@ async def get_chat_history(current_user: user_dependency, session_id: str, db: A
     chat_history = result.scalars().all()
     if not chat_history:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No chat history found for the session")
+
     return chat_history
 
 @router.delete('/delete-chat',status_code=status.HTTP_204_NO_CONTENT)
@@ -78,6 +87,7 @@ async def delete_chat(current_user: user_dependency,session_id:str,db: AsyncSess
         delete(ChatHistory).where(ChatHistory.user_id == current_user.id, ChatHistory.session_id == session_id)
     )
     await db.commit()
+
     # Now deleting the session
     await db.execute(delete(Session).filter(Session.session_id==session_id))
     await db.commit()
@@ -86,8 +96,8 @@ async def delete_chat(current_user: user_dependency,session_id:str,db: AsyncSess
     await redis_chat_history.clear()
     logger.info(f"Chat history and session {session_id} deleted for user {current_user.id}")
 
-@router.post('/qwen-chat', status_code=status.HTTP_200_OK)
-async def qwen_chat(current_user: user_dependency,prompt:str,db: AsyncSession = Depends(get_session)):
+@router.post('/code-agent', status_code=status.HTTP_200_OK)
+async def code_agent(current_user: user_dependency, prompt:str, db: AsyncSession = Depends(get_session)):
     # First validating if the user exists
     query = await db.execute(select(User).filter(User.id == current_user.id))
     user = query.scalars().first()
@@ -100,6 +110,7 @@ async def qwen_chat(current_user: user_dependency,prompt:str,db: AsyncSession = 
     )
     session_obj= session.scalar_one_or_none()
     if session_obj is None:
+        logger.info("No existing session found, creating a new one")
         latest_session_id=generate_session_id(current_user.id)
         new_session=Session(
             user_id=current_user.id,
@@ -110,6 +121,7 @@ async def qwen_chat(current_user: user_dependency,prompt:str,db: AsyncSession = 
         await db.refresh(new_session)
         session_id = new_session.session_id
     else:
+        logger.info("Using existing session")
         session_id = session_obj.session_id
 
     res= await qwen_agent(prompt, session_id)
