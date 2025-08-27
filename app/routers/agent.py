@@ -6,8 +6,7 @@ from ..models import *
 from ..schemas import *
 from datetime import datetime
 from typing import List
-from ..agents.code_agent import code_agent as coding_agent
-from ..agents.gemma3_agent import gemma_agent
+from ..agents.code_agent import code_agent as coding_agent,image_to_code_agent
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 from ..config import settings
 import logging
@@ -152,8 +151,8 @@ async def code_agent(current_user: user_dependency, prompt:str, db: AsyncSession
     return res
 
 
-@router.post('/gemma-chat', status_code=status.HTTP_200_OK)
-async def gemma_chat(
+@router.post('/image_to_code-chat', status_code=status.HTTP_200_OK)
+async def image_code_agent(
     current_user: user_dependency,
     db: AsyncSession = Depends(get_session),
     prompt: str=None,
@@ -164,12 +163,14 @@ async def gemma_chat(
     user = query.scalars().first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
     # Getting the latest user session id
     session = await db.execute(
         select(Session).filter(Session.user_id == current_user.id).order_by(Session.created_at.desc()).limit(1)
     )
     session_obj = session.scalar_one_or_none()
     if session_obj is None:
+        logger.info("No existing session found, creating a new one")
         latest_session_id = generate_session_id(current_user.id)
         new_session = Session(
             user_id=current_user.id,
@@ -186,7 +187,7 @@ async def gemma_chat(
     # Read image as bytes
     image_bytes = await image.read()
 
-    res= await gemma_agent(prompt=prompt, session_id=session_id,image=image_bytes)
+    res= await image_to_code_agent(prompt=prompt, session_id=session_id,image=image_bytes)
     chat_data = ChatData(
         session_id=session_id,
         user_id=current_user.id,
