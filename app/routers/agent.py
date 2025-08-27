@@ -72,29 +72,43 @@ async def get_chat_history(current_user: user_dependency, session_id: str, db: A
 
     return chat_history
 
-@router.delete('/delete-chat',status_code=status.HTTP_204_NO_CONTENT)
-async def delete_chat(current_user: user_dependency,session_id:str,db: AsyncSession = Depends(get_session)):
-    # Check if any chat exists for the user and session
-    result = await db.execute(
+@router.delete('/delete-chat', status_code=status.HTTP_204_NO_CONTENT)
+async def delete_chat(
+    current_user: user_dependency,
+    session_id: str,
+    db: AsyncSession = Depends(get_session)
+):
+    # Fetch session
+    session = await db.execute(
+        select(Session).filter(Session.session_id == session_id, Session.user_id == current_user.id)
+    )
+    session_obj = session.scalars().first()
+
+    if not session_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+
+    # Fetch chat
+    chat = await db.execute(
         select(ChatHistory).filter(ChatHistory.user_id == current_user.id, ChatHistory.session_id == session_id)
     )
-    chat_obj = result.scalar_one_or_none()
-    if not chat_obj:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User/session not found")
+    chat_obj = chat.scalars().first()
 
-    # Deleting all chat history of user in PostgreSQL and redis
+    # If chat exists → delete chat + redis
+    if chat_obj:
+        await db.execute(
+            delete(ChatHistory).where(ChatHistory.user_id == current_user.id, ChatHistory.session_id == session_id)
+        )
+        await db.commit()
+        redis_chat_history = RedisChatMessageHistory(session_id=session_id, url=settings.REDIS_URL)
+        await redis_chat_history.aclear()
+        logger.info(f"Chat history for session {session_id} deleted for user {current_user.id}")
+
+    # Always delete session (since it exists)
     await db.execute(
-        delete(ChatHistory).where(ChatHistory.user_id == current_user.id, ChatHistory.session_id == session_id)
+        delete(Session).where(Session.session_id == session_id, Session.user_id == current_user.id)
     )
     await db.commit()
-
-    # Now deleting the session
-    await db.execute(delete(Session).filter(Session.session_id==session_id))
-    await db.commit()
-    # Now deleting from redis
-    redis_chat_history=RedisChatMessageHistory(session_id=session_id,url=settings.REDIS_URL)
-    await redis_chat_history.clear()
-    logger.info(f"Chat history and session {session_id} deleted for user {current_user.id}")
+    logger.info(f"Session {session_id} deleted for user {current_user.id}")
 
 @router.post('/code-agent', status_code=status.HTTP_200_OK)
 async def code_agent(current_user: user_dependency, prompt:str, db: AsyncSession = Depends(get_session)):
