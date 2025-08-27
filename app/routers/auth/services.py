@@ -132,4 +132,5 @@ async def create_user_from_google_info(google_user: GoogleUser, db: AsyncSession
 #This line sets up a reusable dependency for FastAPI routes. It means
 # that when you use user_dependency in a route, FastAPI will automatically
 # run the get_current_user function and give you the current logged-in user.
-user_dependency = Annotated[dict, Depends(get_current_user)]
+#user_dependency = Annotated[dict, Depends(get_current_user)]
+user_dependency = Annotated[User, Depends(get_current_user)]

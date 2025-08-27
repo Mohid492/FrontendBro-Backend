@@ -6,7 +6,7 @@ from ..models import *
 from ..schemas import *
 from datetime import datetime
 from typing import List
-from ..agents.code_agent import qwen_agent
+from ..agents.code_agent import code_agent as coding_agent
 from ..agents.gemma3_agent import gemma_agent
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 from ..config import settings
@@ -138,7 +138,7 @@ async def code_agent(current_user: user_dependency, prompt:str, db: AsyncSession
         logger.info("Using existing session")
         session_id = session_obj.session_id
 
-    res= await qwen_agent(prompt, session_id)
+    res= await coding_agent(prompt, session_id)
     chat_data = ChatData(
         session_id=session_id,
         user_id=current_user.id,
