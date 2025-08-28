@@ -105,7 +105,19 @@ bash
 docker compose down -v
 ```
 
-### 6️⃣ Launch the API Server
+### 6️⃣ Install Ollama for Local Embeddings
+
+Install Ollama: https://ollama.com/download
+
+Then run the following command in your terminal:
+
+bash
+
+```
+ollama run nomic-embed-text:latest
+```
+
+### 7️⃣ Launch the API Server
 
 bash
 
