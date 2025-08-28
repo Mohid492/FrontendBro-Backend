@@ -86,4 +86,12 @@ uvicorn main:app --reload
 Interactive API docs:\
 👉 `http://127.0.0.1:8000/docs`
 
+🧑‍💻 Frontend (Coming Soon)
+----------------------------
 
+A React-based frontend is currently in development. It will allow users to:
+
+-   Interact with the chat interface
+-   Manage authentication and session history
+
+Stay tuned for updates!
