@@ -6,7 +6,7 @@ from ..models import *
 from ..schemas import *
 from datetime import datetime
 from typing import List
-from ..agents.code_agent import code_agent as coding_agent,image_to_code_agent
+from ..agents.code_agent import code_agent as coding_agent
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 from ..config import settings
 import logging
@@ -138,56 +138,6 @@ async def code_agent(current_user: user_dependency, prompt:str, db: AsyncSession
         session_id = session_obj.session_id
 
     res= await coding_agent(prompt, session_id)
-    chat_data = ChatData(
-        session_id=session_id,
-        user_id=current_user.id,
-        prompt=prompt,
-        response=res
-    )
-
-    await store_chat(chat_data, db)
-    logger.info("Chat data stored in the database")
-
-    return res
-
-
-@router.post('/image_to_code-chat', status_code=status.HTTP_200_OK)
-async def image_code_agent(
-    current_user: user_dependency,
-    db: AsyncSession = Depends(get_session),
-    prompt: str=None,
-    image: UploadFile = File(...)
-):
-    # First validating if the user exists
-    query = await db.execute(select(User).filter(User.id == current_user.id))
-    user = query.scalars().first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-    # Getting the latest user session id
-    session = await db.execute(
-        select(Session).filter(Session.user_id == current_user.id).order_by(Session.created_at.desc()).limit(1)
-    )
-    session_obj = session.scalar_one_or_none()
-    if session_obj is None:
-        logger.info("No existing session found, creating a new one")
-        latest_session_id = generate_session_id(current_user.id)
-        new_session = Session(
-            user_id=current_user.id,
-            session_id=latest_session_id
-        )
-        db.add(new_session)
-        await db.commit()
-        await db.refresh(new_session)
-        session_id = new_session.session_id
-    else:
-        logger.info("Using existing session")
-        session_id = session_obj.session_id
-
-    # Read image as bytes
-    image_bytes = await image.read()
-
-    res= await image_to_code_agent(prompt=prompt, session_id=session_id,image=image_bytes)
     chat_data = ChatData(
         session_id=session_id,
         user_id=current_user.id,
