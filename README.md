@@ -71,7 +71,41 @@ alembic upgrade head
 
 This sets up your PostgreSQL schema.
 
-### 5️⃣ Launch the API Server
+### 5️⃣ Set Up Redis with Docker (for Chat History)
+
+Install Docker if you haven't already: https://docs.docker.com/get-docker
+
+Then run the following commands:
+
+bash
+
+```
+# Pull Redis image
+docker pull redis
+
+# Start Redis container in detached mode
+docker compose up -d
+
+```
+
+To stop the container:
+
+bash
+
+```
+docker compose down
+
+```
+
+To stop and remove volumes:
+
+bash
+
+```
+docker compose down -v
+```
+
+### 6️⃣ Launch the API Server
 
 bash
 
