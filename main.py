@@ -33,7 +33,7 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "Sup !?"}
+    return {"message": "Welcome to the FastAPI application!"}
 
 
 app.include_router(auth_router)
