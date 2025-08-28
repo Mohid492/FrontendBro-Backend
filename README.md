@@ -30,12 +30,60 @@ The project integrates **OpenAI, LangChain, ChromaDB, Redis, PostgreSQL, and OAu
 
 ---
 
-## 🚀 Getting Started
+⚙️ Setup Instructions
+---------------------
 
-Follow these steps to set up and run the project locally:  
+Follow these steps to get the project running locally:
 
-### 1️⃣ Install pipenv
-```bash
+### 1️⃣ Install Pipenv
+
+bash
+
+```
 pip install pipenv
+
+```
+
+### 2️⃣ Install Dependencies
+
+bash
+
+```
+pipenv install
+
+```
+
+This will install all required packages listed in `Pipfile`.
+
+### 3️⃣ Configure Environment Variables
+
+Create a `.env` file and populate it with the required values. Use `config.py` as a reference for the expected keys.
+
+### 4️⃣ Run Alembic Migrations
+
+bash
+
+```
+alembic revision --autogenerate -m "Initial migration"
+alembic upgrade head
+
+```
+
+This sets up your PostgreSQL schema.
+
+### 5️⃣ Launch the API Server
+
+bash
+
+```
+uvicorn main:app --reload
+
+```
+
+✅ Your FastAPI server is now running at:\
+👉 `http://127.0.0.1:8000`
+
+Interactive API docs:\
+👉 `http://127.0.0.1:8000/docs`
 
 
