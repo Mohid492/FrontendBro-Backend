@@ -117,7 +117,13 @@ bash
 ollama run nomic-embed-text:latest
 ```
 
-### 7️⃣ Launch the API Server
+### 7️⃣ Install Microsoft Edge (Recommended)
+
+Microsoft Edge is essential to run Selenium api.  
+
+Download: [https://www.microsoft.com/edge](https://www.microsoft.com/edge)
+
+### 8️⃣ Launch the API Server
 
 bash
 
